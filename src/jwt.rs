@@ -138,6 +138,13 @@ pub fn decode_with_decrypter(
     DEFAULT_CONTEXT.decode_with_decrypter(input, decrypter)
 }
 
+pub fn decode_with_decrypter_op(
+    input: impl AsRef<[u8]>,
+    decrypter: &dyn JweDecrypter,
+) -> Result<(Vec<u8>, JweHeader), JoseError> {
+    DEFAULT_CONTEXT.decode_with_decrypter_op(input, decrypter)
+}
+
 /// Return the JWT object decoded with a selected decrypting algorithm.
 ///
 /// # Arguments

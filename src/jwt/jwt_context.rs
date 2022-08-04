@@ -303,6 +303,54 @@ impl JwtContext {
         })
     }
 
+    /// Return the JWT object decoded by the selected decrypter.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - a JWT string representation.
+    /// * `decrypter` - a decrypter of the decrypting algorithm.
+    pub fn decode_with_decrypter_op(
+        &self,
+        input: impl AsRef<[u8]>,
+        decrypter: &dyn JweDecrypter,
+    ) -> Result<(Vec<u8>, JweHeader), JoseError> {
+        self.decode_with_decrypter_selector_op(input, |_header| Ok(Some(decrypter)))
+    }
+
+    /// Return the payload of the JWT object in binary format.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - a JWT string representation.
+    /// * `decrypter_selector` - a function for selecting the decrypting algorithm.
+    pub fn decode_with_decrypter_selector_op<'a, F>(
+        &self,
+        input: impl AsRef<[u8]>,
+        selector: F,
+    ) -> Result<(Vec<u8>, JweHeader), JoseError>
+    where
+        F: Fn(&JweHeader) -> Result<Option<&'a dyn JweDecrypter>, JoseError>,
+    {
+        (|| -> anyhow::Result<(Vec<u8>, JweHeader)> {
+            let (payload, header) =
+                self.jwe_context
+                    .deserialize_compact_with_selector(input, |header| {
+                        let decrypter = match selector(&header)? {
+                            Some(val) => val,
+                            None => return Ok(None),
+                        };
+
+                        Ok(Some(decrypter))
+                    })?;
+
+            Ok((payload, header))
+        })()
+        .map_err(|err| match err.downcast::<JoseError>() {
+            Ok(err) => err,
+            Err(err) => JoseError::InvalidJwtFormat(err),
+        })
+    }
+
     /// Return the JWT object decoded by using a JWK set.
     ///
     /// # Arguments

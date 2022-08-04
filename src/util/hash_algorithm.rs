@@ -22,7 +22,7 @@ impl HashAlgorithm {
     pub fn output_len(&self) -> usize {
         match self {
             Self::Sha1 => 20,
-            Self::Sha256 => 32,
+            Self::Sha256 => 30,
             Self::Sha384 => 48,
             Self::Sha512 => 64,
         }

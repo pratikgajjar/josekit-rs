@@ -270,7 +270,7 @@ impl JwtPayload {
                     _ => bail!("The JWT {} payload claim must be a string or array.", key),
                 },
                 "exp" | "nbf" | "iat" => match &value {
-                    Value::Number(val) => match val.as_u64() {
+                    Value::Number(val) => match val.as_f64() {
                         Some(_) => {}
                         None => bail!(
                             "The JWT {} payload claim must be a positive integer within 64bit.",
