@@ -2,12 +2,13 @@ use std::fmt::Display;
 use std::ops::Deref;
 
 use anyhow::bail;
+use openssl::hash::MessageDigest;
 use openssl::pkey::{PKey, Private};
 use openssl::sign::Signer;
 
 use crate::jwk::Jwk;
 use crate::jws::{JwsAlgorithm, JwsSigner, JwsVerifier};
-use crate::util::HashAlgorithm;
+use crate::util::{self, HashAlgorithm};
 use crate::{JoseError, Value};
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -26,7 +27,7 @@ impl HmacJwsAlgorithm {
     /// # Arguments
     /// * `secret` - A secret key
     pub fn to_jwk(&self, secret: &[u8]) -> Jwk {
-        let k = base64::encode_config(secret, base64::URL_SAFE_NO_PAD);
+        let k = util::encode_base64_urlsafe_nopad(secret);
 
         let mut jwk = Jwk::new("oct");
         jwk.set_key_use("sig");
@@ -89,7 +90,7 @@ impl HmacJwsAlgorithm {
                 Some(val) => bail!("A parameter alg must be {} but {}", self.name(), val),
             }
             let k = match jwk.parameter("k") {
-                Some(Value::String(val)) => base64::decode_config(val, base64::URL_SAFE_NO_PAD)?,
+                Some(Value::String(val)) => util::decode_base64_urlsafe_no_pad(val)?,
                 Some(val) => bail!("A parameter k must be string type but {:?}", val),
                 None => bail!("A parameter k is required."),
             };
@@ -171,7 +172,7 @@ impl HmacJwsAlgorithm {
             }
 
             let k = match jwk.parameter("k") {
-                Some(Value::String(val)) => base64::decode_config(val, base64::URL_SAFE_NO_PAD)?,
+                Some(Value::String(val)) => util::decode_base64_urlsafe_no_pad(val)?,
                 Some(val) => bail!("A parameter k must be string type but {:?}", val),
                 None => bail!("A parameter k is required."),
             };
@@ -269,8 +270,12 @@ impl JwsSigner for HmacJwsSigner {
 
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, JoseError> {
         (|| -> anyhow::Result<Vec<u8>> {
-            let md = self.algorithm.hash_algorithm().message_digest();
-
+            let md = match &self.algorithm.hash_algorithm() {
+                HashAlgorithm::Sha1 => MessageDigest::sha1(),
+                HashAlgorithm::Sha256 => MessageDigest::sha256(),
+                HashAlgorithm::Sha384 => MessageDigest::sha384(),
+                HashAlgorithm::Sha512 => MessageDigest::sha512(),
+            };
             let mut signer = Signer::new(md, &self.private_key)?;
             signer.update(message)?;
             let signature = signer.sign_to_vec()?;
@@ -323,8 +328,12 @@ impl JwsVerifier for HmacJwsVerifier {
 
     fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), JoseError> {
         (|| -> anyhow::Result<()> {
-            let md = self.algorithm.hash_algorithm().message_digest();
-
+            let md = match &self.algorithm.hash_algorithm() {
+                HashAlgorithm::Sha1 => MessageDigest::sha1(),
+                HashAlgorithm::Sha256 => MessageDigest::sha256(),
+                HashAlgorithm::Sha384 => MessageDigest::sha384(),
+                HashAlgorithm::Sha512 => MessageDigest::sha512(),
+            };
             let mut signer = Signer::new(md, &self.private_key)?;
             signer.update(message)?;
             let new_signature = signer.sign_to_vec()?;

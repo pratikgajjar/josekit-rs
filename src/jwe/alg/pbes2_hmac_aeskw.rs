@@ -5,6 +5,7 @@ use std::ops::Deref;
 
 use anyhow::bail;
 use openssl::aes::{self, AesKey};
+use openssl::hash::MessageDigest;
 use openssl::pkcs5;
 
 use crate::jwe::{JweAlgorithm, JweContentEncryption, JweDecrypter, JweEncrypter, JweHeader};
@@ -65,7 +66,7 @@ impl Pbes2HmacAeskwJweAlgorithm {
                 Some(val) => bail!("A parameter alg must be {} but {}", self.name(), val),
             }
             let k = match jwk.parameter("k") {
-                Some(Value::String(val)) => base64::decode_config(val, base64::URL_SAFE_NO_PAD)?,
+                Some(Value::String(val)) => util::decode_base64_urlsafe_no_pad(val)?,
                 Some(val) => bail!("A parameter k must be string type but {:?}", val),
                 None => bail!("A parameter k is required."),
             };
@@ -128,7 +129,7 @@ impl Pbes2HmacAeskwJweAlgorithm {
             }
 
             let k = match jwk.parameter("k") {
-                Some(Value::String(val)) => base64::decode_config(val, base64::URL_SAFE_NO_PAD)?,
+                Some(Value::String(val)) => util::decode_base64_urlsafe_no_pad(val)?,
                 Some(val) => bail!("A parameter k must be string type but {:?}", val),
                 None => bail!("A parameter k is required."),
             };
@@ -256,7 +257,7 @@ impl JweEncrypter for Pbes2HmacAeskwJweEncrypter {
         (|| -> anyhow::Result<Option<Vec<u8>>> {
             let p2s = match in_header.claim("p2s") {
                 Some(Value::String(val)) => {
-                    let p2s = base64::decode_config(val, base64::URL_SAFE_NO_PAD)?;
+                    let p2s = util::decode_base64_urlsafe_no_pad(val)?;
                     if p2s.len() < 8 {
                         bail!("The decoded value of p2s header claim must be 8 or more.");
                     }
@@ -265,7 +266,7 @@ impl JweEncrypter for Pbes2HmacAeskwJweEncrypter {
                 Some(_) => bail!("The p2s header claim must be string."),
                 None => {
                     let p2s = util::random_bytes(self.salt_len);
-                    let p2s_b64 = base64::encode_config(&p2s, base64::URL_SAFE_NO_PAD);
+                    let p2s_b64 = util::encode_base64_urlsafe_nopad(&p2s);
                     out_header.set_claim("p2s", Some(Value::String(p2s_b64)))?;
                     p2s
                 }
@@ -288,7 +289,12 @@ impl JweEncrypter for Pbes2HmacAeskwJweEncrypter {
             salt.push(0);
             salt.extend_from_slice(&p2s);
 
-            let md = self.algorithm.hash_algorithm().message_digest();
+            let md = match &self.algorithm.hash_algorithm() {
+                HashAlgorithm::Sha1 => MessageDigest::sha1(),
+                HashAlgorithm::Sha256 => MessageDigest::sha256(),
+                HashAlgorithm::Sha384 => MessageDigest::sha384(),
+                HashAlgorithm::Sha512 => MessageDigest::sha512(),
+            };
             let mut derived_key = vec![0; self.algorithm.derived_key_len()];
             pkcs5::pbkdf2_hmac(&self.private_key, &salt, p2c, md, &mut derived_key)?;
 
@@ -368,7 +374,7 @@ impl JweDecrypter for Pbes2HmacAeskwJweDecrypter {
 
             let p2s = match header.claim("p2s") {
                 Some(Value::String(val)) => {
-                    let p2s = base64::decode_config(val, base64::URL_SAFE_NO_PAD)?;
+                    let p2s = util::decode_base64_urlsafe_no_pad(val)?;
                     if p2s.len() < 8 {
                         bail!("The decoded value of p2s header claim must be 8 or more.");
                     }
@@ -382,16 +388,28 @@ impl JweDecrypter for Pbes2HmacAeskwJweDecrypter {
                     Some(val) => usize::try_from(val)?,
                     None => bail!("Overflow u64 value: {}", val),
                 },
-                Some(_) => bail!("The p2s header claim must be string."),
+                Some(_) => bail!("The p2c header claim must be string."),
                 None => bail!("The p2c header claim is required."),
             };
+
+            if p2c > 1000000 {
+                bail!(
+                    "The p2c value is too large. This is a possible DoS attack: {}",
+                    p2c
+                );
+            }
 
             let mut salt = Vec::with_capacity(self.algorithm().name().len() + 1 + p2s.len());
             salt.extend_from_slice(self.algorithm().name().as_bytes());
             salt.push(0);
             salt.extend_from_slice(&p2s);
 
-            let md = self.algorithm.hash_algorithm().message_digest();
+            let md = match &self.algorithm.hash_algorithm() {
+                HashAlgorithm::Sha1 => MessageDigest::sha1(),
+                HashAlgorithm::Sha256 => MessageDigest::sha256(),
+                HashAlgorithm::Sha384 => MessageDigest::sha384(),
+                HashAlgorithm::Sha512 => MessageDigest::sha512(),
+            };
             let mut derived_key = vec![0; self.algorithm.derived_key_len()];
             pkcs5::pbkdf2_hmac(&self.private_key, &salt, p2c, md, &mut derived_key)?;
 
@@ -431,7 +449,6 @@ impl Deref for Pbes2HmacAeskwJweDecrypter {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use base64;
     use serde_json::json;
 
     use super::Pbes2HmacAeskwJweAlgorithm;
@@ -454,7 +471,7 @@ mod tests {
 
             let jwk = {
                 let key = util::random_bytes(8);
-                let key = base64::encode_config(&key, base64::URL_SAFE_NO_PAD);
+                let key = util::encode_base64_urlsafe_nopad(&key);
 
                 let mut jwk = Jwk::new("oct");
                 jwk.set_key_use("enc");
@@ -472,6 +489,45 @@ mod tests {
             let dst_key = decrypter.decrypt(encrypted_key.as_deref(), &enc, &out_header)?;
 
             assert_eq!(&src_key as &[u8], &dst_key as &[u8]);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn reject_pbes2_hmac_with_too_large_p2c() -> Result<()> {
+        let enc = AescbcHmacJweEncryption::A128cbcHs256;
+
+        for alg in vec![
+            Pbes2HmacAeskwJweAlgorithm::Pbes2Hs256A128kw,
+            Pbes2HmacAeskwJweAlgorithm::Pbes2Hs384A192kw,
+            Pbes2HmacAeskwJweAlgorithm::Pbes2Hs512A256kw,
+        ] {
+            let mut header = JweHeader::new();
+            header.set_content_encryption(enc.name());
+
+            let jwk = {
+                let key = util::random_bytes(8);
+                let key = util::encode_base64_urlsafe_nopad(&key);
+
+                let mut jwk = Jwk::new("oct");
+                jwk.set_key_use("enc");
+                jwk.set_parameter("k", Some(json!(key)))?;
+                jwk
+            };
+
+            let mut encrypter = alg.encrypter_from_jwk(&jwk)?;
+            encrypter.set_iter_count(1000001);
+            let mut out_header = header.clone();
+            let src_key = util::random_bytes(enc.key_len());
+            let encrypted_key = encrypter.encrypt(&src_key, &header, &mut out_header)?;
+
+            let decrypter = alg.decrypter_from_jwk(&jwk)?;
+
+            let err = decrypter
+                .decrypt(encrypted_key.as_deref(), &enc, &out_header)
+                .unwrap_err();
+            assert_eq!(format!("{}", err), "Invalid JWE format: The p2c value is too large. This is a possible DoS attack: 1000001");
         }
 
         Ok(())

@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cmp::Eq;
 use std::convert::Into;
 use std::fmt::{Debug, Display};
@@ -172,10 +173,7 @@ impl JweHeader {
         let key = "x5c";
         let mut vec = Vec::with_capacity(values.len());
         for val in values {
-            vec.push(Value::String(base64::encode_config(
-                val.as_ref(),
-                base64::URL_SAFE_NO_PAD,
-            )));
+            vec.push(Value::String(util::encode_base64_standard(val)));
         }
         self.claims.insert(key.to_string(), Value::Array(vec));
     }
@@ -187,12 +185,10 @@ impl JweHeader {
                 let mut vec = Vec::with_capacity(vals.len());
                 for val in vals {
                     match val {
-                        Value::String(val2) => {
-                            match base64::decode_config(val2, base64::URL_SAFE_NO_PAD) {
-                                Ok(val3) => vec.push(val3.clone()),
-                                Err(_) => return None,
-                            }
-                        }
+                        Value::String(val2) => match util::decode_base64_standard(val2) {
+                            Ok(val3) => vec.push(val3.clone()),
+                            Err(_) => return None,
+                        },
                         _ => return None,
                     }
                 }
@@ -209,14 +205,14 @@ impl JweHeader {
     /// * `value` - A X.509 certificate SHA-1 thumbprint
     pub fn set_x509_certificate_sha1_thumbprint(&mut self, value: impl AsRef<[u8]>) {
         let key = "x5t";
-        let val = base64::encode_config(&value, base64::URL_SAFE_NO_PAD);
+        let val = util::encode_base64_urlsafe_nopad(value);
         self.claims.insert(key.to_string(), Value::String(val));
     }
 
     /// Return the value for X.509 certificate SHA-1 thumbprint header claim (x5t).
     pub fn x509_certificate_sha1_thumbprint(&self) -> Option<Vec<u8>> {
         match self.claims.get("x5t") {
-            Some(Value::String(val)) => match base64::decode_config(val, base64::URL_SAFE_NO_PAD) {
+            Some(Value::String(val)) => match util::decode_base64_urlsafe_no_pad(val) {
                 Ok(val2) => Some(val2),
                 Err(_) => None,
             },
@@ -231,14 +227,14 @@ impl JweHeader {
     /// * `value` - A x509 certificate SHA-256 thumbprint
     pub fn set_x509_certificate_sha256_thumbprint(&mut self, value: impl AsRef<[u8]>) {
         let key = "x5t#S256";
-        let val = base64::encode_config(&value, base64::URL_SAFE_NO_PAD);
+        let val = util::encode_base64_urlsafe_nopad(value);
         self.claims.insert(key.to_string(), Value::String(val));
     }
 
     /// Return the value for X.509 certificate SHA-256 thumbprint header claim (x5t#S256).
     pub fn x509_certificate_sha256_thumbprint(&self) -> Option<Vec<u8>> {
         match self.claims.get("x5t#S256") {
-            Some(Value::String(val)) => match base64::decode_config(val, base64::URL_SAFE_NO_PAD) {
+            Some(Value::String(val)) => match util::decode_base64_urlsafe_no_pad(val) {
                 Ok(val2) => Some(val2),
                 Err(_) => None,
             },
@@ -356,14 +352,14 @@ impl JweHeader {
     /// * `value` - A nonce
     pub fn set_nonce(&mut self, value: impl AsRef<[u8]>) {
         let key = "nonce";
-        let val = base64::encode_config(&value, base64::URL_SAFE_NO_PAD);
+        let val = util::encode_base64_urlsafe_nopad(value);
         self.claims.insert(key.to_string(), Value::String(val));
     }
 
     /// Return the value for nonce header claim (nonce).
     pub fn nonce(&self) -> Option<Vec<u8>> {
         match self.claims.get("nonce") {
-            Some(Value::String(val)) => match base64::decode_config(val, base64::URL_SAFE_NO_PAD) {
+            Some(Value::String(val)) => match util::decode_base64_urlsafe_no_pad(val) {
                 Ok(val2) => Some(val2),
                 Err(_) => None,
             },
@@ -378,14 +374,14 @@ impl JweHeader {
     /// * `value` - A agreement PartyUInfo
     pub fn set_agreement_partyuinfo(&mut self, value: impl AsRef<[u8]>) {
         let key = "apu";
-        let val = base64::encode_config(&value, base64::URL_SAFE_NO_PAD);
+        let val = util::encode_base64_urlsafe_nopad(value);
         self.claims.insert(key.to_string(), Value::String(val));
     }
 
     /// Return the value for agreement PartyUInfo header claim (apu).
     pub fn agreement_partyuinfo(&self) -> Option<Vec<u8>> {
         match self.claims.get("apu") {
-            Some(Value::String(val)) => match base64::decode_config(val, base64::URL_SAFE_NO_PAD) {
+            Some(Value::String(val)) => match util::decode_base64_urlsafe_no_pad(val) {
                 Ok(val2) => Some(val2),
                 Err(_) => None,
             },
@@ -400,14 +396,14 @@ impl JweHeader {
     /// * `value` - A agreement PartyVInfo
     pub fn set_agreement_partyvinfo(&mut self, value: impl AsRef<[u8]>) {
         let key = "apv";
-        let val = base64::encode_config(&value, base64::URL_SAFE_NO_PAD);
+        let val = util::encode_base64_urlsafe_nopad(value);
         self.claims.insert(key.to_string(), Value::String(val));
     }
 
     /// Return the value for agreement PartyVInfo header claim (apv).
     pub fn agreement_partyvinfo(&self) -> Option<Vec<u8>> {
         match self.claims.get("apv") {
-            Some(Value::String(val)) => match base64::decode_config(val, base64::URL_SAFE_NO_PAD) {
+            Some(Value::String(val)) => match util::decode_base64_urlsafe_no_pad(val) {
                 Ok(val2) => Some(val2),
                 Err(_) => None,
             },
@@ -565,7 +561,7 @@ impl JweHeader {
                 },
                 "x5t" | "x5t#S256" | "nonce" | "apu" | "apv" => match &value {
                     Value::String(val) => {
-                        if !util::is_base64_url_safe_nopad(val) {
+                        if !util::is_base64_urlsafe_nopad(val) {
                             bail!("The JWE {} header claim must be a base64 string.", key);
                         }
                     }
@@ -576,7 +572,7 @@ impl JweHeader {
                         for val in vals {
                             match val {
                                 Value::String(val) => {
-                                    if !util::is_base64_url_safe_nopad(val) {
+                                    if !util::is_base64_standard(val) {
                                         bail!(
                                             "The JWE {} header claim must be a base64 string.",
                                             key
@@ -617,6 +613,18 @@ impl JoseHeader for JweHeader {
     fn box_clone(&self) -> Box<dyn JoseHeader> {
         Box::new(self.clone())
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
 }
 
 impl AsRef<Map<String, Value>> for JweHeader {
@@ -653,6 +661,7 @@ mod tests {
 
     use crate::jwe::JweHeader;
     use crate::jwk::Jwk;
+    use crate::{Map, Value};
 
     #[test]
     fn test_new_jwe_header() -> Result<()> {
@@ -664,9 +673,13 @@ mod tests {
         header.set_jwk_set_url("jku");
         header.set_jwk(jwk.clone());
         header.set_x509_url("x5u");
-        header.set_x509_certificate_chain(&vec![b"x5c0", b"x5c1"]);
-        header.set_x509_certificate_sha1_thumbprint(b"x5t");
-        header.set_x509_certificate_sha256_thumbprint(b"x5t#S256");
+        header.set_x509_certificate_chain(&vec![
+            b"x5c0".to_vec(),
+            b"x5c1".to_vec(),
+            "@@~".as_bytes().to_vec(),
+        ]);
+        header.set_x509_certificate_sha1_thumbprint(b"x5t@@~");
+        header.set_x509_certificate_sha256_thumbprint(b"x5t#S256 @@~");
         header.set_key_id("kid");
         header.set_token_type("typ");
         header.set_content_type("cty");
@@ -679,35 +692,58 @@ mod tests {
         header.set_subject("sub");
         header.set_claim("header_claim", Some(json!("header_claim")))?;
 
-        assert!(matches!(header.algorithm(), Some("alg")));
-        assert!(matches!(header.content_encryption(), Some("enc")));
-        assert!(matches!(header.compression(), Some("zip")));
-        assert!(matches!(header.jwk_set_url(), Some("jku")));
-        assert!(matches!(header.jwk(), Some(val) if val == jwk));
-        assert!(matches!(header.x509_url(), Some("x5u")));
-        assert!(
-            matches!(header.x509_certificate_chain(), Some(vals) if vals == vec![
+        assert_eq!(header.algorithm(), Some("alg"));
+        assert_eq!(header.content_encryption(), Some("enc"));
+        assert_eq!(header.compression(), Some("zip"));
+        assert_eq!(header.jwk_set_url(), Some("jku"));
+        assert_eq!(header.jwk(), Some(jwk));
+        assert_eq!(header.x509_url(), Some("x5u"));
+        assert_eq!(
+            header.x509_certificate_chain(),
+            Some(vec![
                 b"x5c0".to_vec(),
                 b"x5c1".to_vec(),
+                "@@~".as_bytes().to_vec()
             ])
         );
-        assert!(
-            matches!(header.x509_certificate_sha1_thumbprint(), Some(val) if val == b"x5t".to_vec())
+        assert_eq!(
+            header.claim("x5c"),
+            Some(&Value::Array(vec![
+                Value::String("eDVjMA==".to_string()),
+                Value::String("eDVjMQ==".to_string()),
+                Value::String("QEB+".to_string()),
+            ]))
         );
-        assert!(
-            matches!(header.x509_certificate_sha256_thumbprint(), Some(val) if val == b"x5t#S256".to_vec())
+        assert_eq!(
+            header.x509_certificate_sha1_thumbprint(),
+            Some(b"x5t@@~".to_vec())
         );
-        assert!(matches!(header.key_id(), Some("kid")));
-        assert!(matches!(header.token_type(), Some("typ")));
-        assert!(matches!(header.content_type(), Some("cty")));
-        assert!(matches!(header.url(), Some("url")));
-        assert!(matches!(header.nonce(), Some(val) if val == b"nonce".to_vec()));
-        assert!(matches!(header.agreement_partyuinfo(), Some(val) if val == b"apu".to_vec()));
-        assert!(matches!(header.agreement_partyvinfo(), Some(val) if val == b"apv".to_vec()));
-        assert!(matches!(header.issuer(), Some("iss")));
-        assert!(matches!(header.subject(), Some("sub")));
-        assert!(matches!(header.critical(), Some(vals) if vals == vec!["crit0", "crit1"]));
-        assert!(matches!(header.claim("header_claim"), Some(val) if val == &json!("header_claim")));
+        assert_eq!(
+            header.claim("x5t"),
+            Some(&Value::String("eDV0QEB-".to_string()))
+        );
+        assert_eq!(
+            header.x509_certificate_sha256_thumbprint(),
+            Some(b"x5t#S256 @@~".to_vec())
+        );
+        assert_eq!(
+            header.claim("x5t#S256"),
+            Some(&Value::String("eDV0I1MyNTYgQEB-".to_string()))
+        );
+        assert_eq!(header.key_id(), Some("kid"));
+        assert_eq!(header.token_type(), Some("typ"));
+        assert_eq!(header.content_type(), Some("cty"));
+        assert_eq!(header.url(), Some("url"));
+        assert_eq!(header.nonce(), Some(b"nonce".to_vec()));
+        assert_eq!(header.agreement_partyuinfo(), Some(b"apu".to_vec()));
+        assert_eq!(header.agreement_partyvinfo(), Some(b"apv".to_vec()));
+        assert_eq!(header.issuer(), Some("iss"));
+        assert_eq!(header.subject(), Some("sub"));
+        assert_eq!(header.critical(), Some(vec!["crit0", "crit1"]));
+        assert_eq!(header.claim("header_claim"), Some(&json!("header_claim")));
+
+        let map: Map<String, Value> = header.clone().into();
+        assert_eq!(JweHeader::from_map(map)?, header);
 
         Ok(())
     }

@@ -6,10 +6,10 @@ JOSE (Javascript Object Signing and Encryption: JWT, JWS, JWE, JWA, JWK) library
 
 ```toml
 [dependencies]
-josekit = "0.8.1"
+josekit = "0.10.1"
 ```
 
-This library depends on OpenSSL 1.1.1 DLL. Read more about [Crate openssl](https://docs.rs/openssl/). 
+This library depends on OpenSSL 1.1.1 or above DLL. Read more about [Crate openssl](https://docs.rs/openssl/). 
 
 ## Build
 
@@ -23,6 +23,9 @@ cargo build --release
 ## Publish
 
 ```sh
+1. Update to vX.X.X on cargo.toml and README.md.
+
+2. Run commnads
 cargo test
 cargo publish --dry-run
 git tag vX.X.X
@@ -392,7 +395,7 @@ You can generate the keys by executing openssl command.
 
 ```sh
 # Generate a new private key. Keygen bits must be 2048 or more.
-openssl openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
 
 # Generate a public key from the private key.
 openssl pkey -in private.pem -pubout -out public.pem
@@ -792,7 +795,7 @@ You can generate the keys by executing openssl command.
 
 ```sh
 # Generate a new private key. Keygen bits must be 2048 or more.
-openssl openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
 
 # Generate a public key from the private key.
 openssl pkey -in private.pem -pubout -out public.pem
